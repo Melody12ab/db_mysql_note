@@ -41,4 +41,117 @@ HASH索引特性：
 
 ##视图
 
+视图是虚拟表，对使用视图的用户基本上透明，视图是在使用时候动态生成的，相对于表的优势：
+- 简单 已经是筛选好的表的结果
+- 安全 只能访问被允许的结果集
+- 数据独立 一旦视图的结构确定，可以屏蔽表结构改变的影响
+
+创建视图需要`CREATE VIEW`的权限，并对查询涉及的列有`SELECT`权限，如使用`CREATE OR REPLACE`或者`DROP`修改视图，那么还需要该视图的`DROP`权限
+
+```
+CREATE [OR REPLACE] [ALGORITHM={UNDEFINED | NERGE TEMPTABLE}] VIEW view_name [(column_list)] AS select_statement [WITH | CASCADED | LOCAL | CHECK OPTION]
+
+EG:
+create or replace view stall_list_view as
+select s.staff_id,s.first_name,s.last_name,a.address
+from staff as s,address as a
+where s.address_id=a.address_id
+```
+
+以下类型的视图不可更新：
+- 包含聚合函数(SUM、MIN、MAX、COUNT)、DISTINCT、GROUP BY、HAVING、UNION或者UNION ALL
+- 常量视图
+- SELECT中包含子查询
+- JION
+- FROM一个不能更新的视图
+- WHERE字句的子查询引用了FROM字句中的表
+
+WITH [CACSCADED |LOCAL] CHECK OPTION决定了是否允许更新数据使记录不再满足视图的条件，其中：
+- LOCAL只需满足本视图的条件就可以更新
+- CASCADED则必须满足所有针对该视图的所有视图的条件才可以更新
+
+可以一次删除一个或者多个视图
+
+```
+DROP VIEW [IF EXISTS] view_name [,view_name]...[RESTRICT|CASCADE]
+```
+
+查看视图通过以下方式都可以：
+
+```
+SHOW TABLES
+
+SHOW TABLE STATUS
+
+SHOW CREATE STATUS [FROM db_name] [LIKE 'pattern']
+
+查看系统表information_schema.views
+select * from views where table_name='viewname'\G
+```
+
+##存储过程和函数
+存储过程是事先进过编译并存储在一个数据库中的一段SQL语句的集合，存储过程和函数的区别是函数必须有返回值，存储过程没有，存储过程的参数可用IN、OUT、INOUT类型；而函数必须使用IN类型。
+
+操作存储过程前需要确认用户是否具有相应的权限。创建需要CREATE ROUTINE权限、修改或删除需要使用ALTER ROUTINE权限，执行需要EXECUTE权限。
+
+创建、修改存储过程或函数语法：
+
+```
+CREATE PROCEDURE sp_name([proc_parameter[,...]])
+	[characteristic...] routine_body
+
+CREATE FUNCTION sp_name([func_parameter[,...]])
+	RETURNS type
+	[characteristic ...] routine_body
+	
+	proc_parameter:
+	[IN |OUT |INOUT] param_name type
+	
+	func_parameter:
+	param_name type
+	
+type:
+	Any valid MySQL data type
+characteristic:
+	LANGUAGE SQL
+	|[NOT] DELERMINISTIC
+	|{CONTAINS SQL |NO SQL|READS SQL DATA|MODIFIES SQL DATA}
+	|SQL SECURITY {DEFINER|INVOKER}
+	|COMMENT 'string'
+	
+routine_body:
+	Valid SQL procudure statement or statements
+
+修改	
+ALTER {PROCEDURE|FUNCTION} sp_name [characteristic ...]
+
+haracteristic:
+	{CONTAINS SQL |NO SQL|READS SQL DATA|MODIFIES SQL DATA}
+	|SQL SECURITY {DEFINER|INVOKER}
+	|COMMENT 'string'
+	
+调用
+CALL sp_name([parameter[,...]])
+
+MySQL存储过程和函数中可以包含DDL，可以执行Commit或者Rollback，但不允许LOAD DATA INFILE
+
+eg:
+DELIMITER $$
+
+CREATE PROCEDURE film_in_sock(IN p_film_id INT,IN p_store_id INT,OUT p_file_count INT)
+READ SQL DATA
+BEGIN
+	SELECT inventory_id
+	FROM inventory
+	WHERE film_id=p_film_id
+	AND store_id=p_store_id
+	AND inventory_in_stock(inventory_id);
+	
+	SELECT FOUND_ROWS() INTO p_film_count;
+END $$
+
+DELIMITER ;
+```
+
+对characteristic特征值部分说明：
 
