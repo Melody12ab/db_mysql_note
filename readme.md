@@ -4,7 +4,8 @@
 2. [MySQL支持的数据类型][3]
 3. [MySQL中的运算符和常用函数][4]
 4. [MySQL表类型、选择合适数据类型、字符集][5]
- 
+
+持续更新中... 
 
 [1]: https://book.douban.com/subject/25817684/
 [2]: https://github.com/Melody12ab/db_mysql_note/blob/master/sqlbasic.md
