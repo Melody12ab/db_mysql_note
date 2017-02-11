@@ -1,3 +1,5 @@
+本文主要内容：事务、锁、SQL Mode、**分区**
+
 ##事务控制和锁定语句
 ####LOCK TABLE和UNLOCK TABLE
 - LOCK TABLES可锁定用于**当前线程**的表，如果表被*其他线程*锁定，则当前线程会等待知道可以获取所有锁定为止。
@@ -102,8 +104,45 @@ SQL Mode定义了MySQL应支持的SQL语法、数据校验等，这样可以更�
 
 查看SQL Mode：`select @@sql_mode`
 
-修改sql_mode：`SET [SESSION|GLOBAL] sql_mode='modes'`
+修改sql_mode：` SET [SESSION|GLOBAL] sql_mode='modes' ` 
 
 启动时指定：`--sql-mode="modes"`
 
+####SQL Mode的常见功能
+- 检验日期数据合法性，在ANSI模式下，非法日期可以插入，但值为"0000-00-00 00:00:00",系统提示warning，在TRADITIONAL模式下，会拒绝插入并报错。
+- 在INSERT或UPDATE过程中，如果SQL Mode处于TRADITIONAL严格模式，运行MOD(x,0)会产生错误，而在非严格该模式返回NULL
+- 启用NO_BACKSLASH_ESCAPES模式，使反斜线成为普通字符，在导入数据时或许会用到。
+- 启用PIPES_AS_CONCAT模式，将“||”视为字符串连接操作符，在Oracle数据库中“||”被作为连接操作符，在其他数据库中则无法执行。
 
+####常见的SQL Mode
+MySQL的SQL Mode（具体版本建议参考相关版本官方网文档）
+
+sql_mode值|描述
+---|---
+ANSI|等同于REAL_AS_FLOAT、PIPES_AS_CONCAT、ANSI_QUOTES、IGNORE_SPACE和ANSI组合模式，该模式使语法和行为更符合标准的SQL
+STRICT_TRANS_TABLES|适用于事务表和非事务表，它是严格模式，不允许非法日期，也不允许超过字段长度的值插入字段中，对于插入不正确的值给出错误而不是警告
+TRADITIONAL|等同于STRICT_TRANS_TABLES、STRICT_ALL_TABLES、NO_ZERO_IN_DATE、NO_ZERO_DATE、ERROR_FOR_DIVISION_BY_ZERO、TRANDITIONAL和NO_AUTO_CREATE_USER组合模式，也为严格模式。可应用在事务表和非事务表，用于事务表时，只要出现错误就会立即回滚
+
+####SQL Mode在迁移中如何使用
+MySQL提供了很多数据库的组合模式名称，在异构数据库之间迁移数据时可以尝试使用这些模式来导出适合于目标数据库格式的数据
+
+组合后的模式名称|组合中的各个sql_mode
+---| ---
+DB2| PIPLES_AS_CONCAT 、ANSI_QUOTES、IGNORE_SPACE、NO_KEY_OPTIONS、NO_TABLE_OPTIONS、NO_FIELD_OPTIONS
+MAXDB|PIPES_AS_CONCAT、ANSI_QUOTES、IGNORE_SPACE、NO_KEY_OPTIONS、NO_TABLE_OPTIONS、NO_FIELD_OPTIONS、NO_AUTO_CREATE_USER
+MSSQL| PIPES_AS_CONCAT、ANSI_QUOTES、IGNORE_SPACE、NO_KEY_OPTIONS、NO_TABLE_OPTIONS、NO_FIELD_OPTIONS、NO_AUTO_CREATE_USER
+ORACLE| PIPES_AS_CONCAT、ANSI_QUOTES、IGNORE_SPACE、NO_KEY_OPTIONS、NO_TABLE_OPTIONS、NO_FIELD_OPTIONS、NO_AUTO_CREATE_USER、NO_AUTO_CREATE_USER
+POSTGRESQL| PIPES_AS_CONCAT、ANSI_QUOTES、IGNORE_SPACE、NO_KEY_OPTIONS、NO_TABLE_OPTIONS、NO_FIELD_OPTIONS
+
+>SQL Mode的严格模式为MySQL提供了很好的数据校验功能，保证了数据的准确性，TRANDITIONAL和STRICT_TRANS_TABLES是常用的两种严格模式。
+
+##MySQL分区
+MySQL从5.1开始支持分区。分区指根据一定规则，数据库把一个表分解成多个更小更容易管理的部分。就数据库的应用而言，逻辑上只有一个表或一个索引，但实际该表可能由多个物理分区对象组成，每个分区都是一个独立对象，可以独自处理，可以作为表的一部分处理。
+
+MySQL分区优点：
+- 和单磁盘或文件系统分区比，可以存储更多数据
+- 优化查询，在Where字句中包含分区条件时，可以只扫描必要的一个或多个分区；同时在涉及SUM()和COUNT()这类聚合函数的查询时，可以容易地在每个分区上并行处理。
+- 对已过期或不需要的数据，可以通过删除分区来快速删除
+- 跨磁盘分散数据查询，获得更大的查询吞吐量
+
+####分区概述
