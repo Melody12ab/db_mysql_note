@@ -146,3 +146,144 @@ MySQL分区优点：
 - 跨磁盘分散数据查询，获得更大的查询吞吐量
 
 ####分区概述
+分区有利管理大表，引入了分区键的概念，分区键用于根据区间值、特定值列表或HASH函数值执行数据的聚集，让数据更具规则分布在不同的分区中，让大对象变成一些小对象。
+
+查看MySQL是否支持分区：`SHOW variables like %partition%`
+
+和非分区表设置存储引擎一样，分区表设置存储引擎，只能用[STORAGE] ENGINE字句。如下创建一个使用InnoDB引擎并有6个HASH分区的表：
+
+```
+create table emp(empid int,salary decimal(7,2),birth_date DATE)
+engine=innodb
+prrtition by hash(month(birth_date))
+partition 6;
+```
+
+####分区类型（MySQL5.1）
+- RANGE分区：给予一个给定连续区间范围，吧数据分配到不同分区。
+- LIST分区：类似RANGE分区，LIST分区是基于枚举出的值列表分区，RANGE是基于给定的连续区间范围分区。
+- HASH分区：基于给定的分区个数，把数据分配到不同的分区。
+- KEY分区：类似HASH分区。
+
+在MySQL5.1版本中，RANGE、LIST、HASH要求分区键必须是INT，KEY可以是其他类型（BLOB或TEXT除外）。无论哪种MySQL分区类型，不能使用主键/唯一键字段之外的其他字段分区。
+
+####Range分区
+区间连续不能互相重叠，使用`VALUES LESS THAN`操作符进行分区定义。
+
+```
+CREATE TABLE emp(
+id int not null,
+ename varchar(30),
+hired date not null default '1970-01-01',
+separated date not null default '9999-12-31',
+job varchar(30) not null,
+store_id int not null
+)
+partition by range (store_id)(
+	partition p0 values less than (10),
+	partition p1 values less than (20),
+	partition p2 values less than (30)
+)
+
+以上在store_id在1~9的在分区p0中，以此类推，每个分区按顺序进行定义，从最低到最高。如出现id大于30的商品,会报错，服务器不知道把记录保存在哪里
+```
+
+>可以在设置分区使用VALUES LESS THAN MAXVALUE子句，该子句提供给所有大于明确指定的最高值的值，MAXVALUE表示最大的可能的整数值。
+
+MySQL支持在VALUES LESS THAN子句中使用表达式，如：
+
+```
+CREATE TABLE emp_date(
+id int not null,
+ename varchar(30),
+separated date not null default '9999-12-31',
+job varchar(30) not null,
+store_id int not null
+)
+partition by range(YEAR(separated))(
+	partition p0 values less than (1995),
+	partition p1 values less than (2000),
+	partition p2 values less than (2005)
+)
+```
+>MySQL5.1要在日期或者字符串上进行分区，需要使用函数转换，5.5改进了功能，提供RANGE COLUMNS分区支持非整数分区，创建日期分区就不需要转换了。
+
+RANGE分区功能特别适用于以下情况：
+- 当数据过期删除时，只需要简单`ALTER TABLE emp DROP PARTITION p0`来删除p0分区数据
+- 经常运行包括分区键的查询，如检索商品ID大于25的记录，MySQL扫描p2分区即可。
+
+####List分区
+LIST分区是建立离散的值来分区，LIST分区是一个枚举列表的值得集合，RANGE分区是一个连续区间值得集合。例如：
+
+```
+CREATE TABLE expenses(
+expense_date DATE NOT NULL,
+category INT,
+amount DECIMAL(10,3)
+)PARTITION BY LIST(category)(
+	PARTITION p0 VALUES IN (3,5),
+	PARTITION p1 VALUES IN (1,10),
+	PARTITION p2 VALUES IN (4,9),
+	PARTITION p3 VALUES IN (2),
+	PARTITION p4 VALUES IN (6)
+)
+```
+>如果插入的列值不在包含分区值列表中，那么INSERT操作会失败并报错。
+
+5.5版本支持非整数分区，如：
+
+```
+CREATE TABLE expenses(
+	expense_date DATE NOT NULL,
+	category VARCHAR(30),
+	amount DECIMAL(10,3)
+)PARTITION BY LIST COLUMNS(category)(
+	PARTITION p0 VALUES IN ('loding','food'),
+	PARTITION p1 VALUES IN ('flights','ground transportation'),
+	PARTITION p2 VALUES IN ('lesiure','customer entertainment'),
+	PARTITION p3 VALUES IN ('communications'),
+	PARTITION p4 VALUES IN ('fees')
+)
+```
+
+####Columns分区
+Columns分区在MySQL5.5引入的分区类型，结局了RANGE和LIST只支持整数分区的问题，除此之外，Columns分区还支持多列分区。如：
+
+```
+CREATE TABLE rc3(
+	a INT,
+	b INT
+)
+PARTITION BY RANGE COLUMNS(a,b)(
+	PARTITION p01 VALUES LESS THAN (0,10),
+	PARTITION p02 VALUES LESS THAN (10,10),
+	PARTITION p03 VALUES LESS THAN (10,20),
+	PARTITION p03 VALUES LESS THAN (10,MAXVALUE),
+	PARTITION p03 VALUES LESS THAN (MAXVALUES,MAXVALUE),
+)
+
+其中元组分开比较大小 (10,9)<(10,10) 
+```
+
+####Hash分区
+HASH分区主要用来分散**热点度**，确保数据在预先确定个数的分区中尽可能平均分布。MySQL支持**常规HASH分区**和**线性HASH分区**，常规使用取模算法，线性使用一个线性的2的幂的运算法则。如：
+
+```
+CREATE TABLE emp(
+	id INT NOT NULL,
+	ename VARCHAR(30),
+	hired DATE NOT NULL DEFAULT '1970-01-01',
+	separated DATE NOT NULL DEFAULT '9999-12-31',
+	job VARCHAR(30) NOT NULL,
+	store_id INT NOT NULL
+)
+PARTITION BY HASH(store_id) PARTITIONS 4;
+
+以上表有4个分区，数据将保存记录的分区编号为N，N=MOD(expr,num)。以上expr为store_id，num为4。
+```
+>常规HASH在新增分区或者合并分区时候，大部分数据需要重新计算，管理代价太大，不适合灵活变动的需求，这个时候就有了线性的分区`PARTITION BY LINEAR`，其在分区维护时能处理更加迅速。但是数据分布不如常规HASH分布不太均匀。
+
+####Key分区
+
+
+
