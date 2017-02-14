@@ -1,4 +1,4 @@
-本文主要内容：事务、锁、SQL Mode、**分区**
+本文主要内容：事务、锁、SQL Mode、**分区**(这个有点意思)
 
 ##事务控制和锁定语句
 ####LOCK TABLE和UNLOCK TABLE
@@ -284,6 +284,67 @@ PARTITION BY HASH(store_id) PARTITIONS 4;
 >常规HASH在新增分区或者合并分区时候，大部分数据需要重新计算，管理代价太大，不适合灵活变动的需求，这个时候就有了线性的分区`PARTITION BY LINEAR`，其在分区维护时能处理更加迅速。但是数据分布不如常规HASH分布不太均匀。
 
 ####Key分区
+类似于HASH分区，只不过HASH分区允许使用用户自定义的表达式，而Key分区需要使用MySQL服务器提供的HASH函数；KEY分区支持除BLOB or Text类型外其他类型的列作为分区键。如：
 
+```
+CREATE TABLE emp(
+	id int not null,
+	ename varchar(30),
+	hired date nogt null default '1970-01-01',
+	separated date not null default '9999-12-31',
+	job varchar(30) not null
+)
+PARTITION BY KEY(job) PARTITIONS 4;
+```
+>创建Key分区不指定分区键时默认首先使用主键作为分区键，没有主键时，选择*非空***唯一**键作为分区键。没有主键和唯一键时，必须指定分区键。
 
+和HASH分区类似，在KEY分区中使用LINEAR可通过取模算法分散热点数据读写。
 
+####子分区和分区中处理NULL值方式
+分区表中对每个分区的再次分割，即复合分区。适合保存非常大量的数据记录。如：
+
+```
+CREATE TABLE ts(id int,purchased date)
+partition by range(year(purchased))
+subpartition by hash(to_days(purchased))
+subpartitions 2
+(
+	partition p0 values less than (1999),
+	partition p1 values less than (2000),
+	partition p2 values less than maxvalue
+)
+```
+
+在RANGE分区中，NULL作为最小值处理；LIST必须出现在枚举列表中；HASH/KEY分区，NULL值被当做零值处理。
+
+####分区管理
+MySQL提供添加、删除、重定义、合并、拆分分区命令。
+- RANGE & LIST分区管理
+	- 删除分区：`ALTER TABLE tablename DROP PARTITION pname`
+	- 增加分区：`ALTER TABLE tbl_name ADD PARTITION(expr)`
+	- 重新定义分区：`ALTER TABLE REORGANIZE PARTITION INFO`
+
+	```
+	删除分区：
+	alter table emp_date drop partition p2;
+	增加分区：
+	alter table emp_date add partition (aprtititon p4 values less than (2030))
+
+	alter table expenses add partition(partition p6 values in (6,11))
+	重定义分区合并：
+	alter table emp_date reorganize partition p1,p2,p3 into (
+	partition p1 values less than (2015)
+	)
+	```
+	
+>重新定义分区只能重新定义相邻的分区，重新定义的分区区间必须和原来分区区间覆盖相同，也不能使用重新定义分区来改变表分区的类型。
+
+####HASH & KEY分区
+修改操作：`ALTER TABLE COALESCE PARTITION`
+
+```
+减少分区：
+alter table emp coalesce partition 2
+增加8个分区：
+alter table emp add partititon partititons 8
+```
