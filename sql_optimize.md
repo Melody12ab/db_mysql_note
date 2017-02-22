@@ -257,7 +257,99 @@ MySQL不支持函数索引，但可对列前某一部分进行索引，如title�
 
 常用的索引为B-Tree索引和HASH索引，HASH只有Memory/Heap引擎支持，且只适用于Key-Value查询，通过Hash索引更快，但其不适用于范围查找，只有在where条件中是用“=”查找才会使用索引。
 
-###MySQL如何使用索引
+##MySQL如何使用索引
+B-Tree代表平衡树
+###MySQL中能使用索引的典型场景
+- 匹配全值，对索引中所有列都有等值匹配的条件。
+
+```
+mysql> desc select * from rental where rental_date='2005-05-25 17:22:10' and inventory_id=373 and customer_id=343\G
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: rental
+   partitions: NULL
+         type: const
+possible_keys: rental_date,idx_fk_inventory_id,idx_fk_customer_id
+          key: rental_date
+      key_len: 10
+          ref: const,const,const
+         rows: 1
+     filtered: 100.00
+        Extra: NULL
+1 row in set, 1 warning (0.00 sec)
+```
+
+- 匹配值得范围查询，多索引的值能进行范围查找。
+
+```
+mysql> desc select * from rental where customer_id>=373 and customer_id<400 \G
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: rental
+   partitions: NULL
+         type: range
+possible_keys: idx_fk_customer_id
+          key: idx_fk_customer_id
+      key_len: 2
+          ref: NULL
+         rows: 718
+     filtered: 100.00
+        Extra: Using index condition
+1 row in set, 1 warning (0.00 sec)
+
+```
+>type为range表示选择范围查询，Extra列为Using where，表示优化器除了利用索引加速访问，还需要根据索引回表查询数据。
+
+- 匹配最左前缀，仅使用索引中最左边列进行查找。如在col1+col2+col3字段上的联合索引可被包含col1、（col1+col2）、（col1+col2+col3）的等值查询利用到，但是不能被col2、（col2+col3）的等值查询利用到。
+>最左匹配原则可以算是MySQL中B-Tree索引使用的首要原则
+- 仅对索引进行查询，当查询列都在索引的字段中时，查询效率更高。此时Extra部分可能变为了Using index，即不需要回表再查了。
+- 匹配列前缀，仅仅使用索引中的第一列，并只包含索引第一列的开头一部分进行查找。如查找标题title以AFRICAN开头的电影信息：
+
+```
+mysql> desc select title from film_text where title like 'AFRICAN%'\G
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: film_text
+   partitions: NULL
+         type: range
+possible_keys: idx_title_desc_part,idx_title_description
+          key: idx_title_desc_part
+      key_len: 32
+          ref: NULL
+         rows: 1
+     filtered: 100.00
+        Extra: Using where
+1 row in set, 1 warning (0.00 sec)
+```
+
+- 能够实现索引匹配部分精确查找而其它部分进行范围匹配。
+- 如果列名是索引，那么使用column_name is null就会使用索引。
+- MySQL5.6引入了Index Condition Pushdown(ICP)的特性，进一步优化了查询。Pushdown表示操作下方，某些情况下的条件过滤操作下放到存储引擎。
+
+###存在索引但不能使用索引的典型场景
+- 以%开头的LIKE查询不能利用B-Tree索引，执行计划中key的值为NULL表示没有使用索引：
+
+```
+mysql> desc select * from actor where last_name like '%IN%'\G
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: actor
+   partitions: NULL
+         type: ALL
+possible_keys: NULL
+          key: NULL
+      key_len: NULL
+          ref: NULL
+         rows: 200
+     filtered: 11.11
+        Extra: Using where
+1 row in set, 1 warning (0.00 sec)
+```
+>由于B-Tree索引的结构，故以%开头的查询无法利用索引，一般推荐使用全文索引(Fulltext)解决。
 
 
 
