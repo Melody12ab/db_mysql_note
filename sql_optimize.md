@@ -351,6 +351,44 @@ possible_keys: NULL
 ```
 >由于B-Tree索引的结构，故以%开头的查询无法利用索引，一般推荐使用全文索引(Fulltext)解决。
 
+- 数据类型出现影式的转换的时候不会使用索引，特别是当前类型是字符串，那么一定记得在where条件中把字符常量值用引号引起来。
+- 复合索引情况下，加入查询条件不包含索引列最左边部分，即不满足最左原则，不会使用复合索引。
+- 如果MySQL估计使用索引比全表扫描更慢，则不会使用索引。（在5.6版本中，可以查看到为何选择这个优化器）
+- 用or分割开的条件，如果or前条件中列有索引，后面的没有，则索引不会用到（后面肯定要使用全表扫面，就不必要多一次索引增加IO访问）。
+
+###查看索引使用情况
+如果索引正在工作，Handler_read_key的值将很高，该值代表一个行被索引值读取的次数，很低说明增加**索引得到的性能改善不高**。Handler_read_rnd_next值高以为**查询运行低效**，应该建索引补救，该值含义为数据文件读下一行的请求数。
+
+##两个简单实用优化方法
+###定期分析表和检查表
+分析/检查表语法：
+
+```
+分析：
+ANALYZE [LOCAL|NO_WRITE_TO_BINLOG] TABLE tbl_name [,tbl_name]...
+
+检查：
+CHECK TABLE tbl_name [,tbl_name] ... [option]...option={QUICK|FAST|MEDIUM|EXTENDED|CHANGED}
+```
+
+###定期优化表
+优化语法：
+
+```
+OPTIMIZE [LOCAL|NO_WRITE_TO_BINLOG] TABLE tbl_name [,tbl_name]...
+```
+如果已经删除表一部分或者对包含可变长度行的表进行了更改，应该实用OPTIMIZE TABLE优化表。该命令可将表中空间碎片合并，并消除由于删除更新操作造成的空间浪费。
+
+>对InnoDB引擎表，可通过设置innodb_file_per_table参数，设置InnoDB为独立表空间模式，这样每个数据库的每个表都会生成一个独立ibd文件，可一定程度上减轻InnoDB表的空间回收问题。
+>ANALYZE、CHECK、OPTIMIZE、ALTER TABLE执行期间会对表进行锁定，故注意在不忙的时候使用。
+
+
+预告。。。
+下一篇介绍常用SQL的优化，干货满满。
+
+[完]
+
+
 
 
 [1]: http://downloads.mysql.com/docs/sakila-db.zip

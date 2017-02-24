@@ -5,6 +5,7 @@
 3. [MySQL中的运算符和常用函数][4]
 4. [MySQL表类型、选择合适数据类型、字符集][5]
 5. [MySQL事务、锁、SQLMode、分区][6]
+6. [SQL优化（1）][6]
 
 持续更新中... 
 
@@ -14,3 +15,4 @@
 [4]: https://github.com/Melody12ab/db_mysql_note/blob/master/mysql_operator_and_func.md
 [5]: https://github.com/Melody12ab/db_mysql_note/blob/master/table_type_and_code.md
 [6]: https://github.com/Melody12ab/db_mysql_note/blob/master/transaction_lock_mode_partition.md
+[6]: https://github.com/Melody12ab/db_mysql_note/blob/master/sql_optimize.md
